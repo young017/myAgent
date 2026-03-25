@@ -3,4 +3,4 @@ name = "myagent"
 version = "0.1.0"
 description = "myAgent"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = ["requests"]
