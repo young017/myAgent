@@ -1,3 +1,4 @@
+파일 수정함
 # myAgent
 
 ## 실행 방법 (uv)
@@ -64,3 +65,15 @@
 `OLLAMA_BASE_URL` (기본: `http://localhost:11434`)
 `OLLAMA_MODEL` (기본: `qwen2.5-coder:7b`)
 `OLLAMA_SYSTEM` (선택, system 프롬프트)
+
+## 에이전트 모드(파일 읽기/쓰기/수정)
+
+`test.py`를 실행할 때 `--agent`를 켜면, 모델이 시스템 프롬프트 규칙에 따라 파일 도구를 호출할 수 있습니다.
+
+실행:
+
+`uv run python test.py --agent`
+
+주의:
+- 파일 작업은 프로젝트 루트(`test.py`가 있는 폴더) 아래로만 제한됩니다.
+- `update_file`은 `old_text`를 파일에서 “정확히” 찾아 1회 교체합니다.
