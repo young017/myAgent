@@ -1,0 +1,139 @@
+from __future__ import annotations
+
+import json
+from typing import Any
+
+from agent.file_tools import FileToolkit
+from agent.ollama_client import chat_ollama_stream
+from agent.web_tools import WebToolkit
+
+
+def extract_tool_call(text: str) -> dict[str, Any] | None:
+    """
+    LLM 응답에서 아래 형식 1줄을 찾습니다.
+      __TOOL_CALL__{"name":"read_file","arguments":{"path":"README.md"}}
+    """
+    prefix = "__TOOL_CALL__"
+    for line in text.splitlines():
+        # 툴콜이 코드블록(```) 등으로 감싸져도 파싱되도록,
+        # 라인 내에서 prefix 위치를 찾아 JSON 파트를 추출합니다.
+        idx = line.find(prefix)
+        if idx == -1:
+            continue
+
+        json_part = line[idx + len(prefix) :].strip()
+        # 코드블록 마커나 남는 백틱 제거
+        json_part = json_part.strip("`").strip()
+        call = json.loads(json_part)
+        if not isinstance(call, dict) or "name" not in call or "arguments" not in call:
+            raise ValueError("tool call JSON 형식이 올바르지 않습니다.")
+        return call
+    return None
+
+
+def execute_tool_call(
+    *,
+    call: dict[str, Any],
+    toolkit: FileToolkit,
+    web_toolkit: WebToolkit,
+    tool_max_chars: int,
+) -> dict[str, Any]:
+    name = call.get("name")
+    arguments = call.get("arguments") or {}
+
+    try:
+        if name == "read_file":
+            out = toolkit.read_file(path=arguments["path"], max_chars=tool_max_chars)
+        elif name == "write_file":
+            out = toolkit.write_file(path=arguments["path"], content=arguments["content"])
+        elif name == "update_file":
+            out = toolkit.update_file(
+                path=arguments["path"],
+                old_text=arguments["old_text"],
+                new_text=arguments["new_text"],
+            )
+        elif name == "fetch_url":
+            out = web_toolkit.fetch_url(
+                url=arguments["url"],
+                timeout_s=int(arguments.get("timeout_s") or 30),
+                max_chars=int(arguments.get("max_chars") or 0),
+            )
+        else:
+            return {"ok": False, "error": f"알 수 없는 tool: {name}"}
+
+        return {"ok": True, "result": out}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+def run_agent_turn(
+    *,
+    messages: list[dict[str, str]],
+    base_url: str,
+    model: str,
+    timeout_s: int,
+    toolkit: FileToolkit,
+    web_toolkit: WebToolkit,
+    max_agent_steps: int,
+    tool_max_chars: int,
+    enable_tool_logs: bool = True,
+) -> None:
+    """
+    한 번의 사용자 입력에 대해:
+    - LLM 응답을 받아 tool call이 있으면 실행
+    - tool 결과를 다시 LLM에 주입
+    - 최종 답이 나오면 출력/대화 기록
+    """
+    for step in range(max_agent_steps):
+        assistant_text = chat_ollama_stream(
+            base_url=base_url,
+            model=model,
+            messages=messages,
+            timeout_s=timeout_s,
+            print_stream=False,
+        )
+
+        tool_call = None
+        try:
+            tool_call = extract_tool_call(assistant_text)
+        except Exception:
+            tool_call = None
+
+        if tool_call:
+            result = execute_tool_call(
+                call=tool_call,
+                toolkit=toolkit,
+                    web_toolkit=web_toolkit,
+                tool_max_chars=tool_max_chars,
+            )
+
+            if enable_tool_logs:
+                try:
+                    call_preview = json.dumps(tool_call, ensure_ascii=False)
+                except Exception:
+                    call_preview = str(tool_call)
+                print(f"\n[AGENT][STEP {step + 1}] tool_call: {call_preview}")
+
+                preview_text = assistant_text.strip()
+                print(f"[AGENT][STEP {step + 1}] assistant_message:\n{preview_text}")
+
+                try:
+                    result_preview = json.dumps(result, ensure_ascii=False)
+                except Exception:
+                    result_preview = str(result)
+                print(f"[AGENT][STEP {step + 1}] tool_result: {result_preview}")
+
+            # 대화에 tool 호출 응답과 결과를 남깁니다.
+            messages.append({"role": "assistant", "content": assistant_text})
+            messages.append(
+                {"role": "user", "content": "__TOOL_RESULT__" + json.dumps(result, ensure_ascii=False)}
+            )
+            continue
+
+        # tool call이 아니면 최종 응답
+        print(f"\n[AGENT][STEP {step + 1}] final_response:\n{assistant_text}")
+        messages.append({"role": "assistant", "content": assistant_text})
+        break
+    else:
+        print("[에러] tool loop 최대 횟수 초과.")
+
