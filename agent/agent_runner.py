@@ -85,12 +85,15 @@ def run_agent_turn(
     - 최종 답이 나오면 출력/대화 기록
     """
     for step in range(max_agent_steps):
+        if enable_tool_logs:
+            print(f"\n[AGENT 진행 중 - STEP {step + 1}]", flush=True)
+            
         assistant_text = chat_ollama_stream(
             base_url=base_url,
             model=model,
             messages=messages,
             timeout_s=timeout_s,
-            print_stream=False,
+            print_stream=True,
         )
 
         tool_call = None
@@ -103,25 +106,20 @@ def run_agent_turn(
             result = execute_tool_call(
                 call=tool_call,
                 toolkit=toolkit,
-                    web_toolkit=web_toolkit,
+                web_toolkit=web_toolkit,
                 tool_max_chars=tool_max_chars,
             )
 
             if enable_tool_logs:
-                try:
-                    call_preview = json.dumps(tool_call, ensure_ascii=False)
-                except Exception:
-                    call_preview = str(tool_call)
-                print(f"\n[AGENT][STEP {step + 1}] tool_call: {call_preview}")
-
-                preview_text = assistant_text.strip()
-                print(f"[AGENT][STEP {step + 1}] assistant_message:\n{preview_text}")
-
+                # 스트리밍으로 툴 호출 텍스트가 이미 출력되었으므로 결과만 출력
                 try:
                     result_preview = json.dumps(result, ensure_ascii=False)
                 except Exception:
                     result_preview = str(result)
-                print(f"[AGENT][STEP {step + 1}] tool_result: {result_preview}")
+                
+                if len(result_preview) > 500:
+                    result_preview = result_preview[:500] + "... (생략됨)"
+                print(f"[AGENT] 🛠️ 도구 실행 결과: {result_preview}")
 
             # 대화에 tool 호출 응답과 결과를 남깁니다.
             messages.append({"role": "assistant", "content": assistant_text})
@@ -130,10 +128,9 @@ def run_agent_turn(
             )
             continue
 
-        # tool call이 아니면 최종 응답
-        print(f"\n[AGENT][STEP {step + 1}] final_response:\n{assistant_text}")
+        # tool call이 아니면 최종 응답 (이미 스트리밍으로 출력됨)
         messages.append({"role": "assistant", "content": assistant_text})
         break
     else:
-        print("[에러] tool loop 최대 횟수 초과.")
+        print("\n[에러] tool loop 최대 횟수 초과.")
 

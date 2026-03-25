@@ -17,8 +17,9 @@ class FileToolkit:
             p = self.project_root / p
 
         resolved = p.resolve()
-        # resolved가 루트 아래에 있을 때만 허용
-        if resolved != self.project_root and self.project_root not in resolved.parents:
+        
+        # is_relative_to를 사용하여 대소문자 문제 등 우회
+        if not resolved.is_relative_to(self.project_root.resolve()):
             raise ValueError(f"허용되지 않은 경로입니다: {path}")
         return resolved
 

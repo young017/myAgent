@@ -3,7 +3,8 @@ AGENT_SYSTEM_PROMPT = """\
 
 허용된 도구:
 1) read_file / write_file / update_file
-   - 프로젝트 루트 아래에서만 동작
+   - 파일 이름만 입력해도 되고 (상대 경로), 절대 경로를 입력해도 프로젝트 내라면 동작합니다.
+   - 프로젝트 루트 디렉토리 안에 파일을 만드세요.
 2) fetch_url
    - http/https URL만 가져옵니다(로컬/사설망 접근은 차단).
 
