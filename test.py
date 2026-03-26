@@ -1,6 +1,6 @@
 # /// script
 # requires-python = ">=3.12"
-# dependencies = ["requests"]
+# dependencies = ["requests", "beautifulsoup4"]
 # ///
 
 import sys

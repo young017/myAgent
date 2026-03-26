@@ -23,10 +23,11 @@ def run_cli() -> int:
 
     system_parts: list[str] = []
     if args.system.strip():
+        # 사용자가 수동으로 입력한 커스텀 프롬프트가 있다면 최상단에 둡니다.
         system_parts.append(args.system.strip())
     
-    if args.agent:
-        system_parts.append(AGENT_SYSTEM_PROMPT)
+    # 에이전트(Agent)가 도구를 사용할 수 있도록 시스템 지시문을 항상 기본으로 포함합니다.
+    system_parts.append(AGENT_SYSTEM_PROMPT)
     
     # 런타임마다 최신 시스템 프롬프트를 0번 인덱스에 삽입합니다.
     system_content = "\n\n".join(system_parts)
@@ -43,8 +44,7 @@ def run_cli() -> int:
     else:
         print("새로운 채팅을 시작합니다.")
 
-    if args.agent:
-        print("모드: 에이전트(파일/URL tool 사용)")
+    print("모드: 통합 에이전트(파일/URL tool 사용)")
 
     while True:
         try:
@@ -60,41 +60,24 @@ def run_cli() -> int:
             return 0
 
         messages.append({"role": "user", "content": user_text})
-        if not args.agent:
-            try:
-                assistant_text = chat_ollama_stream(
-                    base_url=args.base_url,
-                    model=args.model,
-                    messages=messages,
-                    timeout_s=args.timeout_s,
-                    print_stream=True,
-                )
-            except requests.RequestException as e:
-                print("\n[에러] Ollama 요청 실패.")
-                print("Ollama 서버가 실행 중인지와 모델 이름을 확인하세요.")
-                print(f"상세: {e}")
-                return 1
-
-            messages.append({"role": "assistant", "content": assistant_text})
-        else:
-            # 에이전트 모드
-            try:
-                run_agent_turn(
-                    messages=messages,
-                    base_url=args.base_url,
-                    model=args.model,
-                    timeout_s=args.timeout_s,
-                    toolkit=toolkit,
-                    web_toolkit=web_toolkit,
-                    max_agent_steps=args.max_agent_steps,
-                    tool_max_chars=args.tool_max_chars,
-                    enable_tool_logs=True,
-                )
-            except requests.RequestException as e:
-                print("\n[에러] Ollama 요청 실패.")
-                print("Ollama 서버가 실행 중인지와 모델 이름을 확인하세요.")
-                print(f"상세: {e}")
-                return 1
+        try:
+            # LLM 에이전트 루프 진입점. 도구 사용을 자동으로 제어하고 결과 컨텍스트를 누적합니다.
+            run_agent_turn(
+                messages=messages,
+                base_url=args.base_url,
+                model=args.model,
+                timeout_s=args.timeout_s,
+                toolkit=toolkit,
+                web_toolkit=web_toolkit,
+                max_agent_steps=args.max_agent_steps,
+                tool_max_chars=args.tool_max_chars,
+                enable_tool_logs=True,
+            )
+        except requests.RequestException as e:
+            print("\n[에러] Ollama 요청 실패.")
+            print("Ollama 서버가 실행 중인지와 모델 이름을 확인하세요.")
+            print(f"상세: {e}")
+            return 1
             
         # 매 턴마다 히스토리 저장
         save_history(history_path, messages)

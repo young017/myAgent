@@ -24,11 +24,7 @@ def parse_args() -> argparse.Namespace:
         default=int(os.environ.get("OLLAMA_TIMEOUT_S", "300")),
         help="HTTP 요청 타임아웃(초)",
     )
-    parser.add_argument(
-        "--agent",
-        action="store_true",
-        help="에이전트 모드: LLM이 파일 읽기/쓰기/수정을 도구로 호출할 수 있습니다.",
-    )
+    
     parser.add_argument(
         "--max-agent-steps",
         type=int,
